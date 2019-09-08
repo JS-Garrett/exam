@@ -1,0 +1,19 @@
+package org.hnjk.service.impl;
+
+import org.hnjk.dao.ResCoursewareDao;
+import org.hnjk.service.ResCoursewareService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+@Service
+public class ResCoursewareServiceImpl implements ResCoursewareService {
+
+	@Autowired
+	private ResCoursewareDao resCoursewareDao;
+	
+	@Override
+	public String getCoursewareIdByCoursewareCode(String coursewareCode) {
+		return resCoursewareDao.getCoursewareIdByCoursewareCode(coursewareCode);
+	}
+
+}

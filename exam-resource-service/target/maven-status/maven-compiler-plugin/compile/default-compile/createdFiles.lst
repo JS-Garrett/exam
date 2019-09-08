@@ -1,0 +1,10 @@
+org\hnjk\entity\ResCourseware.class
+org\hnjk\util\ResultUtil.class
+org\hnjk\service\ResCoursewareService.class
+org\hnjk\entity\ResCoursewareObject.class
+org\hnjk\controller\ResCoursewareController.class
+org\hnjk\Application.class
+org\hnjk\exception\GlobalDefaultExceptionHandler.class
+org\hnjk\dao\ResCoursewareDao.class
+org\hnjk\entity\Result.class
+org\hnjk\service\impl\ResCoursewareServiceImpl.class

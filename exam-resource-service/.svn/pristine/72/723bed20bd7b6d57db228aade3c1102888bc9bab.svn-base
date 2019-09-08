@@ -1,0 +1,5 @@
+package org.hnjk.service;
+
+public interface ResCoursewareService {
+	public String getCoursewareIdByCoursewareCode(String coursewareCode);
+}

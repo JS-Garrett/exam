@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>考试</title>
+<link th:href="@{/css/style.css}" rel="stylesheet" type="text/css" />
+<script type="text/javascript"   th:src="@{/js/jquery-3.3.1.min.js}"></script>
+<script type="text/javascript"   th:src="@{/js/util.js}"></script>
+<script type="text/javascript"   th:src="@{/js/question.js}"></script>
+</head>
+<body>
+	<div class="top-container">
+		<div class="photo"><img th:src="${examStudent.imagePath}" class="photo_img_style"></div>
+		<div class="student_info">
+			<input type="hidden" th:value="${remainTime}" id="remainTime">
+			<div>
+				<label>考生姓名：</label><span class="span_length" th:text="${examStudent.studentName}"></span><label>考试课程：</label><span class="span_length" th:text="${examStudent.coursewareName}"></span>
+			</div>
+			<div>
+				<label>考生性别：</label><span class="span_length" th:text="${examStudent.studentSex=='1'}? '男' : (${examStudent.studentSex==''}? '' : '女')"></span><label>考试时间：</label><span class="span_length" th:text="${examStudent.examTime}"></span>
+			</div>
+			<div>
+				<label>准考证号：</label><span class="span_length" th:text="${examStudent.examinationCardNumber}"></span><label>剩余时间：</label><span class="span_length" id="countTime"></span>
+			</div>
+			<div>
+				<label>证件号：</label><span class="span_length" th:text="${examStudent.certificateNumber}"></span>
+			</div>
+		</div>
+		<div class="show_score"></div>
+		<div class="submit_btn">
+			<input type="hidden" th:attr="value=${paper.paperId}" id="paperId" name="paperId">
+			<button id="submitExamPaper" class="button_style">提交试卷</button>
+		</div>
+	</div>
+	<div class="left-container">
+		
+		<div class="left-inner-container">
+			<div class="indicate-banner">
+				<span>未做&nbsp;</span><div class="indicate-grey"></div><span>&nbsp;&nbsp;&nbsp;&nbsp;已做&nbsp;</span><div class="indicate-green"></div><span>&nbsp;&nbsp;&nbsp;&nbsp;标记&nbsp;</span><div class="indicate-oranage"></div>
+			</div>
+			<div class="indicate-question">
+				<div th:each="questionType,questionTypeStat : ${paper.paper.questiontypes.questiontype}" class="question_module">
+					<p th:text="${questionType.questionTypeName}" class="title_brief"></p>
+					<div th:each="question : ${questionType.curQuestion}" class="question-index-block" th:attr="id='q_'+${question.questionId}">
+						<div th:class="${question.marked=='1'}? 'question-index-block-oranage-color': (${question.done=='1'}? 'question-index-block-green-color':'question-index-block-grey-color')" th:text="${question.index}"></div>
+						<input type="hidden" class="innerMarked" th:value="${question.marked}">
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+	<div class="right-container">
+		<div th:each="question,questionStat : ${paper.paper.questions.question}" th:attr="id='c_'+${question.id},type=${question.type}" class="question_hide topic_div">
+			<div th:if="${question.type} eq '1' or ${question.type} eq '2'" class="question_block">
+				<div th:text="|${questionStat.count}、|" class="question_num"></div>
+				<p th:utext="${question.content}" class="question_content"></p>
+				<div th:each="option : ${question.option}" class="option_block" th:attr="id='o_'+${option.id}">
+					<div class="choice_flag"></div>
+					<div th:class="${option.selected=='1'}? 'option_dot option_selected' : 'option_dot'"></div>
+					<div th:text="${option.content}" class="option_content"></div>
+				</div>
+			</div>
+			<div th:if="${question.type} eq '3'" class="question_block">
+				<div class="question_num"></div>
+				<p th:utext="${question.content}" class="question_content"></p>
+				<div class="option_block" th:attr="id='o_0'">
+					<div class="choice_flag"></div>
+					<div th:class="${question.choice=='0'}? 'option_dot option_selected' : 'option_dot'"></div>
+					<div th:text="正确" class="option_content"></div>
+				</div>
+				<div class="option_block" th:attr="id='o_1'">
+					<div class="choice_flag"></div>
+					<div th:class="${question.choice=='1'}? 'option_dot option_selected' : 'option_dot'"></div>
+					<div th:text="错误" class="option_content"></div>
+				</div>
+			</div>
+		</div>
+		<div class="control_button">
+			<button class="prev btn_style" disabled="disabled">上一题</button>
+			<button class="mark btn_style">标记</button>
+			<button class="next btn_style">下一题</button>
+		</div>
+	</div>
+</body>
+</html>

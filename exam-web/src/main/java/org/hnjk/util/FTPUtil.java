@@ -1,0 +1,189 @@
+package org.hnjk.util;
+
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import org.apache.commons.net.ftp.FTP;
+import org.apache.commons.net.ftp.FTPClient;
+import org.apache.commons.net.ftp.FTPFile;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+
+/**
+ * FTP 工具类
+ * @author zzk
+ *2018-09-14
+ */
+@Component
+public class FTPUtil {
+	
+	private static Logger logger = LoggerFactory.getLogger(FTPUtil.class);
+	private static String server;
+	private static String username;
+	private static String password;
+	private static String directory;
+	
+	
+	@Value("${ftp.host}")
+	public void setServer(String server) {
+		FTPUtil.server = server;
+	}
+	@Value("${ftp.username}")
+	public void setUsername(String username) {
+		FTPUtil.username = username;
+	}
+	@Value("${ftp.password}")
+	public void setPassword(String password) {
+		FTPUtil.password = password;
+	}
+	@Value("${ftp.directory}")
+	public void setDirectory(String directory) {
+		FTPUtil.directory = directory;
+	}
+
+	private static FTPClient ftp = null;
+	
+	public static void connect() {
+		ftp = new FTPClient();
+		try {
+			ftp.connect(server);
+			ftp.login(username, password);
+			
+			ftp.changeWorkingDirectory(directory);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+	
+	/**
+	 * 获取目录下所有文件
+	 * @param directory
+	 * @return
+	 */
+	public static FTPFile[] getAllFiles(String directory) {
+		try {
+			return ftp.listFiles(directory);
+		} catch (IOException e) {
+			e.printStackTrace();
+		} finally {
+			close();
+		}
+		return null;
+	}
+	
+	/**
+	 * 删除文件
+	 * @param pathFile
+	 */
+	public static void deleteFile(String pathFile) {
+		try {
+			ftp.deleteFile(pathFile);
+		} catch (IOException e) {
+			e.printStackTrace();
+		} finally {
+			close();
+		}
+	}
+	
+	/**
+	 * 根据路径获取文件
+	 * @param pathFile
+	 * @return
+	 */
+	public static FTPFile getFile(String pathFile) {
+		try {
+			return ftp.mlistFile(pathFile);
+		} catch (IOException e) {
+			e.printStackTrace();
+		} finally {
+			close();
+		}
+		return null;
+	}
+	
+	/**
+	 * 重命名文件
+	 * @param sourceFile
+	 * @param fileName
+	 */
+	public static void renameFile(String sourceFile, String fileName) {
+		try {
+			ftp.rename(ftp.mlistFile(sourceFile).getName(), fileName);
+		} catch (IOException e) {
+			e.printStackTrace();
+		} finally {
+			close();
+		}
+	}
+	
+	public static void makeDirectory(String directory) {
+		try {
+			ftp.makeDirectory(directory);
+		} catch (IOException e) {
+			e.printStackTrace();
+		} finally {
+			close();
+		}
+	}
+	
+	/**
+	 * 获取目录下文件名
+	 * @param directory
+	 * @return
+	 */
+	public static String[] getAllFileNames(String directory) {
+		try {
+			return ftp.listNames(directory);
+		} catch (IOException e) {
+			e.printStackTrace();
+		} finally {
+			close();
+		}
+		return null;
+	}
+	
+	/**
+	 * 上传头像文件
+	 * @param url
+	 * @param directory
+	 */
+	public static void uploadFile(String url, String directory) {
+		try {
+			byte[] imgByte = HttpClientUtil.getHeadImage(url);
+			if(!ftp.changeWorkingDirectory(directory)) {//目录不存在则创建目录
+				ftp.makeDirectory(directory);
+				ftp.changeWorkingDirectory(directory);
+			}
+			
+			FTPFile[] files = ftp.listFiles();
+			if(files.length == 0) {
+				String imageName = "photo.jpg";
+				InputStream is = new ByteArrayInputStream(imgByte);
+				//修改成二进制上传
+				ftp.setFileType(FTP.BINARY_FILE_TYPE);
+				ftp.storeFile(imageName, is);
+				is.close();
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+		} finally {
+			close();
+		}
+	}
+	
+	/**
+	 * 关闭ftp链接
+	 */
+	public static void close() {
+		try {
+			ftp.logout();
+			ftp.disconnect();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+}

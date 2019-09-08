@@ -1,0 +1,288 @@
+package org.hnjk.service.impl;
+
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+
+import org.hnjk.dao.ExamPaperAnswerDao;
+import org.hnjk.dao.ExamPaperDao;
+import org.hnjk.dao.ExamStudentDao;
+import org.hnjk.entity.ExamPaper;
+import org.hnjk.entity.ExamPaperAnswer;
+import org.hnjk.entity.ExamStudent;
+import org.hnjk.jaxb.model.Course;
+import org.hnjk.jaxb.model.CurQuestion;
+import org.hnjk.jaxb.model.Ksconstraint;
+import org.hnjk.jaxb.model.Learningbehavior;
+import org.hnjk.jaxb.model.Option;
+import org.hnjk.jaxb.model.Paper;
+import org.hnjk.jaxb.model.Question;
+import org.hnjk.jaxb.model.Questiontype;
+import org.hnjk.jaxb.model.Scoringstandard;
+import org.hnjk.jaxb.util.CourseXmlConvertUtils;
+import org.hnjk.properties.ExamProperties;
+import org.hnjk.service.ExamPaperAnswerService;
+import org.hnjk.service.ExamPaperService;
+import org.hnjk.service.ExamRuleXmlService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+import com.alibaba.fastjson.JSONObject;
+
+@Service
+@Transactional
+public class ExamPaperServiceImpl implements ExamPaperService {
+	Logger logger = LoggerFactory.getLogger(ExamPaperServiceImpl.class);
+	@Value("${ftp.useFtp}")
+	private boolean useFtp;
+	
+	@Value("${resourceIPAddress}")
+	private String resourceIPAddress;
+	
+	@Value("${localResourcePath}")
+	private String localResourcePath;
+	
+	@Autowired
+	private ExamStudentDao examStudentDao;
+	
+	@Autowired
+	private ExamPaperDao examPaperDao;
+	
+	@Autowired
+	private ExamPaperAnswerService examPaperAnswerService;
+	
+	@Autowired
+	private ExamRuleXmlService examRuleXmlService;
+	
+	@Autowired
+	private ExamPaperAnswerDao examPaperAnswerDao;
+
+	@Override
+	public Map<String, Object> getExamPaper(Course examRule, String paperFileName, ExamStudent examStudent, String isContinue) {
+		Map<String, Object> map = new HashMap<String, Object>();
+		
+		String resourceUrl = useFtp?resourceIPAddress : localResourcePath;
+		String filePath = resourceUrl + paperFileName;
+		Paper paper = CourseXmlConvertUtils.paperXmlToHtmlByURL(filePath.replaceAll("\\\\","/"));
+		
+		List<Learningbehavior> learningBehaviors = examRule.getLearningbehaviors().getLearningbehavior();
+		
+		Ksconstraint ksConstraint = examRule.getConstraint().getKsconstraint();//获取考试约束
+		
+		Scoringstandard scoringstandard = examRule.getScoringstandard();
+		
+		if("0".equals(isContinue)) {
+			//试卷处理
+			List<Question> questions = paper.getQuestions().getQuestion();
+			for (Iterator<Question> qit = questions.iterator(); qit.hasNext();) {
+				Question question = (Question) qit.next();
+				String content = question.getContent().replace("<u>","（").replace("</u>","）");
+				question.setContent(content);
+			}
+			
+			examStudent.setEndTime(null);
+			examStudent.setExamTime(ksConstraint.getCountdown_time());
+			
+			examStudentDao.save(examStudent);
+			map.put("student", examStudent);
+			ExamPaper examPaper = new ExamPaper();
+			examPaper.setExamStudent(examStudent);
+			examPaper.setPaperUrl(paperFileName);
+			examPaper.setCoursewareCode(examStudent.getCoursewareId());
+			examPaper.setCreateDate(new Date());
+			String paperId = examPaperDao.save(examPaper).getId();
+			map.put("paperId", paperId);
+			
+		} else {//继续未完成考试
+			//根据paperId从缓存读取答案
+			String answer = examPaperAnswerService.getAnswerByPaperId(examStudent.getExamPaper().getId());
+			JSONObject answerObj = StringUtils.isEmpty(answer)?new JSONObject():JSONObject.parseObject(answer);
+			
+			//根据paperId从缓存读取标记题目
+			String mark = examPaperAnswerService.getMarkQuestionsByPaperId(examStudent.getExamPaper().getId());
+			logger.info(mark);
+			JSONObject markObj = StringUtils.isEmpty(mark)?new JSONObject():JSONObject.parseObject(mark);
+			
+			List<Questiontype> questiontype = paper.getQuestiontypes().getQuestiontype();
+			for (Iterator<Questiontype> it_qtype = questiontype.iterator(); it_qtype.hasNext();) {
+				Questiontype qtype = (Questiontype) it_qtype.next();
+				List<CurQuestion> curQuestion = qtype.getCurQuestion();
+				for (Iterator<CurQuestion> it_curQuestion = curQuestion.iterator(); it_curQuestion.hasNext();) {
+					CurQuestion curentQuestion = (CurQuestion) it_curQuestion.next();
+					String questionValue = answerObj.getString(curentQuestion.getQuestionId());
+					
+					String questionMark = markObj.getString(curentQuestion.getQuestionId());
+					
+					if(!StringUtils.isEmpty(questionMark)) curentQuestion.setMarked(ExamProperties.QUESTION_MARKED);
+					
+					if(!StringUtils.isEmpty(questionValue)) curentQuestion.setDone(ExamProperties.QUESTION_DONE);
+				}
+			}
+			
+			//查找出已做题目，和已选择的选项 并进行标记
+			List<Question> questions = paper.getQuestions().getQuestion();
+			for (Iterator<Question> qit = questions.iterator(); qit.hasNext();) {
+				Question question = (Question) qit.next();
+				String content = question.getContent().replace("<u>","（").replace("</u>","）");
+				question.setContent(content);
+				
+				String questionValue = answerObj.getString(question.getId());
+				
+				String questionMark = answerObj.getString(question.getId());
+				
+				if(StringUtils.isEmpty(questionValue)) continue;
+				if(ExamProperties.QUESTION_TYPE_SINGLE.equals(question.getType()) || ExamProperties.QUESTION_TYPE_MULTIPLE.equals(question.getType())) {//单选题和多选择
+					List<Option> options = question.getOption();
+					for (Iterator<Option> oit = options.iterator(); oit.hasNext();) {
+						Option option = (Option) oit.next();
+						
+						if(questionValue.contains(option.getId()))
+							option.setSelected(ExamProperties.OPTION_SELECTED);
+							
+					}
+				}else if(ExamProperties.QUESTION_TYPE_JUDGE.equals(question.getType())) {
+					question.setChoice(questionValue);
+				}
+				
+			}
+			
+			map.put("paperId", examStudent.getExamPaper().getId());
+		}
+		map.put("paper", paper);
+		
+		return map;
+	}
+
+	@Override
+	public Paper getPaperById(String paperId) {
+		ExamPaper examPaper = examPaperDao.getOne(paperId);
+		String resourceUrl = useFtp?resourceIPAddress : localResourcePath;
+		String filePath = resourceUrl + examPaper.getPaperUrl();
+		Paper paper = CourseXmlConvertUtils.paperXmlToHtmlByURL(filePath.replaceAll("\\\\","/"));
+		return paper;
+	}
+
+	@Override
+	public String inspectPaper(String paperId, Paper paper) {
+		String answer = examPaperAnswerService.getAnswerByPaperId(paperId);
+		if(StringUtils.isEmpty(answer)) {
+			throw new RuntimeException("试卷没有答案！");
+		}
+		ExamPaper examPaper = examPaperDao.getOne(paperId);
+		ExamStudent examStudent = examPaper.getExamStudent();
+		JSONObject answerObj = JSONObject.parseObject(answer);
+		Iterator<String> it = answerObj.keySet().iterator();
+		List<Question> question = paper.getQuestions().getQuestion();
+		List<CurQuestion> curQuestion = new ArrayList<CurQuestion>();
+		List<Questiontype> questiontype = paper.getQuestiontypes().getQuestiontype();
+		
+		for (Iterator<Questiontype> iterator = questiontype.iterator(); iterator.hasNext();) {
+			Questiontype qtype = (Questiontype) iterator.next();
+			List<CurQuestion> tmpQuestion = qtype.getCurQuestion();
+			curQuestion.addAll(tmpQuestion);
+		}
+		
+		float score = 0;//试卷得分
+		
+		while(it.hasNext()) {
+			String questionId = it.next();
+			String questionValue = answerObj.getString(questionId);
+			
+			if(StringUtils.isEmpty(questionValue)) {//未选择答案
+				continue;
+			}
+			
+			ExamPaperAnswer examPaperAnswer = new ExamPaperAnswer();
+			examPaperAnswer.setQuestionId(questionId);
+			examPaperAnswer.setQuestionAnswer(questionValue);
+			examPaperAnswer.setExamPaper(examPaper);
+			examPaperAnswerDao.save(examPaperAnswer);
+			
+			//获取当前题目的分值
+			float questionScore = 0;
+			for (Iterator<CurQuestion> iterator = curQuestion.iterator(); iterator.hasNext();) {
+				CurQuestion currentQuestion = (CurQuestion) iterator.next();
+				if(questionId.equals(currentQuestion.getQuestionId())) {
+					questionScore = Float.parseFloat(currentQuestion.getScore());
+					break;
+				}
+				continue;
+			}
+			
+			//判断当前题目选择是否正确
+			for (Iterator iterator = question.iterator(); iterator.hasNext();) {
+				Question questionObj = (Question) iterator.next();
+				
+				if(!questionId.equals(questionObj.getId())) {
+					continue;
+				}
+				
+				//获取正确答案
+				String correct_answer = "";
+				
+				if(ExamProperties.QUESTION_TYPE_SINGLE.equals(questionObj.getType())) {
+					List<Option> options = questionObj.getOption();
+					for (Iterator itoption = options.iterator(); itoption.hasNext();) {
+						Option option = (Option) itoption.next();
+						if("0".equals(option.getOptionIsCorrent())) {
+							correct_answer = option.getId();
+							break;
+						}
+						continue;
+					}
+					score += !StringUtils.isEmpty(correct_answer) && questionValue.equals(correct_answer)?questionScore:0;
+				}else if(ExamProperties.QUESTION_TYPE_MULTIPLE.equals(questionObj.getType())) {
+					List<Option> options = questionObj.getOption();
+					List<String> answer_arr = new ArrayList<String>();
+					String[] choice_answer = null;
+					
+					for (Iterator<Option> it_answer = options.iterator(); it_answer.hasNext();) {
+						Option answer_option = (Option) it_answer.next();
+						if("0".equals(answer_option.getOptionIsCorrent()))
+							answer_arr.add(answer_option.getId());
+						else
+							continue;
+					}
+					
+					choice_answer = questionValue.split(",");
+					
+					//如果正确的答案在选择的答案中都能找到，且答案个数一样，即为正确
+					if(answer_arr.size() == choice_answer.length) {
+						boolean isCorrect = true;
+						for (String corrent_answer : answer_arr) {
+							if(questionValue.contains(corrent_answer)) {//答案错误
+								isCorrect = false;
+								break;
+							}
+						}
+						if(isCorrect)
+							score += questionScore;
+					}
+				}else if(ExamProperties.QUESTION_TYPE_JUDGE.equals(questionObj.getType())) {
+					correct_answer = questionObj.getAnswer().getContent().trim();
+					score += !StringUtils.isEmpty(correct_answer) && questionValue.equals(correct_answer)?questionScore:0;
+				}
+			}
+		}
+		examStudent.setEndTime(new Date());
+		examStudent.setScore(String.valueOf(score));
+		examStudentDao.saveAndFlush(examStudent);
+		return String.valueOf(score);
+	}
+
+	@Override
+	public int getExamRedoTimes(String coursewareId) {
+		Course examRule = examRuleXmlService.findExamRule(coursewareId, "imsmanifestext");//获取考试约束参数
+		if(ExamProperties.CAN_REDO.equals(examRule.getConstraint().getKsconstraint().getCan_redo())) 
+			return examRule.getConstraint().getKsconstraint().getRedoTimes();
+		return 0;
+	}
+}

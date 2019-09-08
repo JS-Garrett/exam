@@ -1,0 +1,42 @@
+server:
+  port: 9005
+  servlet:
+    context-path: /server
+  application:
+    name: courseware-auth
+
+spring:
+  security:
+    oauth2:
+      clients:
+        - client-id: client_1
+          client-secret: 123456
+          grant-type: client_credentials,refresh_token
+          valid-seconds: 7200
+          scopes: select
+          refresh-seconds: 720000
+          
+        - client-id: client_2
+          client-secret: 123456
+          grant-type: password,refresh_token
+          valid-seconds: 7200
+          scopes: select
+          refresh-seconds: 720000
+          
+        - client-id: client_3
+          client-secret: 123456
+          grant-type: client_credentials,refresh_token
+          valid-seconds: 7200
+          scopes: select
+          refresh-seconds: 720000
+      signKey:  MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKC
+
+#eureka:
+#  client:
+#    register-with-eureka: false
+#    fetch-registry: false
+
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: http://localhost:9090/eureka/

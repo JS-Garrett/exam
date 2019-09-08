@@ -1,0 +1,47 @@
+/**
+ * Map转json
+ * @param obj
+ * @returns String
+ */
+function MapTOJson(obj) {
+    var str = '{';
+    var i = 1;
+    obj.forEach(function (item, key, mapObj) {
+    	if(mapObj.size == i){
+    		str += '"'+ key+'":"'+ item + '"';
+    	}else{
+    		str += '"'+ key+'":"'+ item + '",';
+    	}
+    	i++;
+    });
+    str +='}';
+    return str;
+}
+
+//单纯分钟和秒倒计时
+function resetTime(time, show, oper){
+	var timer=null;
+	var s=Number(time);//剩余总的考试时间(分钟转秒)
+	var hours = "00";
+	var minutes = "00";
+	var seconds = "00";
+	function countDown(){
+		s--;
+		if(s==0){
+			hours = "00";
+			minutes = '00';
+			seconds = '00';
+			clearInterval(timer);
+			oper();//表单提交
+		}else{
+			var h = Math.floor(s/3600);
+			hours = h>=9?h:"0"+h;
+			var m = Math.floor((s-h*3600)/60);
+			minutes = m>9?m:"0"+m;
+			var ss = s-h*3600-m*60;
+			seconds = ss>9?ss:"0"+ss;
+		}
+		show(hours+":"+minutes+":"+seconds);
+	}
+	timer=setInterval(countDown,1000);
+}

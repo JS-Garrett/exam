@@ -1,0 +1,103 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>org.hnjk</groupId>
+  <artifactId>exam-parent</artifactId>
+  <version>0.0.1-SNAPSHOT</version>
+  <packaging>pom</packaging>
+  
+  <parent>
+  	<groupId>org.springframework.boot</groupId>
+  	<artifactId>spring-boot-starter-parent</artifactId>
+  	<version>2.0.4.RELEASE</version>
+  </parent>
+  
+  <properties>
+  	<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  	<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+  	<java.version>1.8</java.version>
+  	<fastjson.version>1.2.48</fastjson.version>
+  	<commons-net.version>3.6</commons-net.version>
+  	<Memcached-Java-Client.version>3.0.2</Memcached-Java-Client.version>
+  </properties>
+  
+  <dependencyManagement>
+    <dependencies>
+    	<!-- 包兼容管理 -->
+    	<dependency>
+        	<groupId>io.spring.platform</groupId>
+        	<artifactId>platform-bom</artifactId>
+        	<version>Cairo-SR4</version>
+        	<type>pom</type>
+        	<scope>import</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-dependencies</artifactId>
+            <version>Finchley.SR1</version>
+            <type>pom</type>
+            <scope>import</scope>
+        </dependency>
+    </dependencies>
+  </dependencyManagement>
+  
+  <dependencies>
+  	<dependency>
+  		<groupId>org.springframework.boot</groupId>
+  		<artifactId>spring-boot-starter-test</artifactId>
+  		<scope>test</scope>
+  	</dependency>
+  	
+  	<dependency>
+  		<groupId>org.springframework.boot</groupId>
+  		<artifactId>spring-boot-starter-web</artifactId>
+  	</dependency>
+  	
+  	<dependency>
+  		<groupId>org.springframework.boot</groupId>
+  		<artifactId>spring-boot-starter-thymeleaf</artifactId>
+  	</dependency>
+  	
+  	<dependency>
+        <groupId>org.springframework.cloud</groupId>
+        <artifactId>spring-cloud-starter-config</artifactId>
+    </dependency>
+  	
+  	<dependency>
+  		<groupId>org.springframework.cloud</groupId>
+  		<artifactId>spring-cloud-starter-netflix-eureka-server</artifactId>
+  	</dependency>
+  	
+  	<dependency>
+  		<groupId>org.springframework.cloud</groupId>
+  		<artifactId>spring-cloud-starter-netflix-ribbon</artifactId>
+  	</dependency>
+  	
+  	<dependency>
+  		<groupId>mysql</groupId>
+  		<artifactId>mysql-connector-java</artifactId>
+  	</dependency>
+  	
+  	<dependency>
+  		<groupId>com.alibaba</groupId>
+  		<artifactId>fastjson</artifactId>
+  		<version>${fastjson.version}</version>
+  	</dependency>
+  	
+  	<dependency>
+  		<groupId>commons-net</groupId>
+  		<artifactId>commons-net</artifactId>
+  		<version>${commons-net.version}</version>
+  	</dependency>
+  	
+  	<dependency>
+  		<groupId>com.whalin</groupId>
+  		<artifactId>Memcached-Java-Client</artifactId>
+  		<version>${Memcached-Java-Client.version}</version>
+  	</dependency>
+  	
+  	<dependency>
+  		<groupId>org.apache.httpcomponents</groupId>
+  		<artifactId>httpclient</artifactId>
+  	</dependency>
+  </dependencies>
+</project>

@@ -1,0 +1,348 @@
+package org.hnjk.controller;
+
+import java.io.File;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+import org.hnjk.entity.ExamStudent;
+import org.hnjk.entity.Result;
+import org.hnjk.jaxb.model.Course;
+import org.hnjk.jaxb.model.Paper;
+import org.hnjk.properties.ExamProperties;
+import org.hnjk.service.ExamPaperAnswerService;
+import org.hnjk.service.ExamPaperService;
+import org.hnjk.service.ExamRuleXmlService;
+import org.hnjk.service.ExamStudentService;
+import org.hnjk.util.FTPUtil;
+import org.hnjk.util.FileUtil;
+import org.hnjk.util.ResultUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.client.RestTemplate;
+
+import com.alibaba.druid.util.StringUtils;
+
+/**
+ * exam controller 
+ * @author zzk
+ * 2018-09-12
+ */
+@Controller
+@RequestMapping(value="/exam")
+public class ExamController {
+	Logger logger = LoggerFactory.getLogger(ExamController.class);
+	@Value("${ftp.useFtp}")
+	private boolean useFtp;
+	
+	@Value("${remoteResponseAddress}")
+	private String remoteResponseAddress;
+	
+	@Autowired
+	private ExamRuleXmlService examRuleXmlService;
+	
+	@Autowired
+	private ExamPaperService examPaperService;
+	
+	@Autowired
+	private ExamPaperAnswerService examPaperAnswerService;
+	
+	@Autowired
+	private ExamStudentService examStudentService;
+	
+	@Autowired
+	private RestTemplate restTemplate;
+	
+	@RequestMapping({"/","/test"})
+	public String test() {
+		return "test";
+	}
+	
+	/**
+	 * 考试资格审核
+	 * @param request
+	 * @return
+	 */
+	@RequestMapping(value="/canExam")
+	@ResponseBody
+	public Result canExam(HttpServletRequest request, HttpServletResponse response) {
+		String coursewareCode = request.getParameter("coursewareCode");
+		if(StringUtils.isEmpty(coursewareCode)) {
+			return ResultUtil.error("03", "课件编码不能为空！");
+		}
+//		List<NameValuePair> params = new ArrayList<NameValuePair>();
+//		params.add(new BasicNameValuePair("coursewareCode", coursewareCode));
+//		String content = HttpClientUtil.getContent(remoteResponseAddress+"remoteResponseController.do?coursewareId", params);
+//		JSONObject obj = JSONObject.parseObject(content);
+//		String coursewareId = obj.getString("coursewareId");
+		String coursewareId = restTemplate.getForEntity("http://COURSEWARE-SERVICE/resource/courseware/getId/"+coursewareCode, String.class).getBody();
+		logger.info("&&&&&&&&&&&&&&&&"+coursewareId);
+		
+		String accountId = request.getParameter("accountId");
+		String systemCode = request.getParameter("systemCode");
+		
+		if(StringUtils.isEmpty(coursewareId)) {
+			return ResultUtil.error("03", "无法根据课件编码获取课件ID！");
+		}
+		
+		if(StringUtils.isEmpty(accountId)) {
+			return ResultUtil.error("03", "学生账号不能为空！");
+		}
+		
+		Map<String, Object> map = new HashMap<String, Object>();
+		
+		//查询是否有试卷
+		List<String> paperFileNames = new ArrayList<String>();
+		if(useFtp) {//FTP获取
+			FTPUtil.connect();
+			String[] fileNames = FTPUtil.getAllFileNames(coursewareId+File.separator+"paper"+File.separator+"exam");
+			if(fileNames!=null && fileNames.length>0) {
+				for(String fileName : fileNames) {
+					if(!fileName.contains("history") && !paperFileNames.contains(fileName)) {
+						logger.info(fileName);
+						paperFileNames.add(fileName);//添加所有有效试卷
+					}
+				}
+			}
+		} else {//本地服务器
+			List<String> fileNames = FileUtil.getFilesName(coursewareId+File.separator+"paper");
+			if(fileNames!=null && fileNames.size()>0) {
+				for(String fileName : fileNames) {
+					if(!fileName.contains("history") && !paperFileNames.contains(fileName)) {
+						logger.info(fileName);
+						paperFileNames.add(fileName);//添加所有有效试卷
+					}
+				}
+			}
+		}
+		
+		if(paperFileNames==null || paperFileNames.size()==0) {
+			return ResultUtil.error("01", "没有试卷!");
+		}
+		
+		//考试资格校验
+		if (coursewareId != null && accountId != null) {
+			List<ExamStudent> studentRecords = examStudentService.findExamStudentByCoursewareIdAndStudentCode(coursewareId,accountId);//之前是否有过考试记录
+			if (studentRecords != null && studentRecords.size() != 0) {//有考试记录
+				//判断是续接上次考试还是重考
+				for (ExamStudent examStudent : studentRecords) {
+					if(examStudent.getEndTime()==null) {//考试结束时间为空
+						Calendar calendar = Calendar.getInstance();
+						
+						calendar.setTime(examStudent.getStartTime());
+						calendar.add(Calendar.MINUTE, examStudent.getExamTime());//考试结束时间
+						if(calendar.getTime().getTime() > Calendar.getInstance().getTime().getTime()) {//考试进行时间内-重考
+							map.put("continued", true);
+							map.put("coursewareId", coursewareId);
+							map.put("url", "/exam/paper");
+							return ResultUtil.success(map);
+						}
+					}
+				}
+				
+				//判断重考次数限制
+				int redoTimes = examPaperService.getExamRedoTimes(coursewareId);// 获取重考次数
+				if (redoTimes <= studentRecords.size()) {
+					/*查询这个考生最好成绩*/
+					float Score = examStudentService.getMaxScore(coursewareId,accountId);
+					return ResultUtil.error("02", "您已经考过此门课程【考试分数为："+Score+"】，不能再进行考试!");
+				}
+			}
+		}
+		map.put("continued", false);
+		map.put("coursewareId", coursewareId);
+		map.put("url", "/exam/agreement");
+		return ResultUtil.success(map);
+	}
+	
+	/**
+	 * 同意协议
+	 * @param request
+	 * @param model
+	 * @return
+	 */
+	@RequestMapping(value="/agreement")
+	public String agreement(HttpServletRequest request,Model model) {
+		String coursewareId = request.getParameter("coursewareId");
+		String coursewareName = request.getParameter("coursewareName");
+		
+		String accountId = request.getParameter("accountId");
+		String accountName =request.getParameter("accountName");
+		String classId = request.getParameter("classId");
+		String sex = request.getParameter("sex");
+		String phoneNumber = request.getParameter("phoneNumber");
+		String certificateType = request.getParameter("certificateType");
+		String certificateNumber = request.getParameter("certificateNumber");
+		String examinationCardNumber = request.getParameter("examinationCardNumber");
+		String systemCode = request.getParameter("systemCode");
+		String imagePath = request.getParameter("imagePath");
+		
+		model.addAttribute("coursewareId", coursewareId);
+		model.addAttribute("coursewareName", coursewareName);
+		model.addAttribute("accountId", accountId);
+		model.addAttribute("accountName", accountName);
+		model.addAttribute("classId", classId);
+		model.addAttribute("sex", sex);
+		model.addAttribute("phoneNumber", phoneNumber);
+		model.addAttribute("certificateType", certificateType);
+		model.addAttribute("certificateNumber", certificateNumber);
+		model.addAttribute("examinationCardNumber", examinationCardNumber);
+		model.addAttribute("systemCode", systemCode);
+		model.addAttribute("imagePath", imagePath);
+		return "agreement";
+	}
+	
+	/**
+	 * 获取试卷
+	 * @param request
+	 * @return
+	 */
+	@RequestMapping(value="/paper")
+	public String getExamPaper(HttpServletRequest request,Model model) {
+		String coursewareId = request.getParameter("coursewareId");
+		String coursewareName = request.getParameter("coursewareName");
+		
+		String accountId = request.getParameter("accountId");
+		String accountName =request.getParameter("accountName");
+		String classId = request.getParameter("classId");
+		String sex = request.getParameter("sex");
+		String phoneNumber = request.getParameter("phoneNumber");
+		String certificateType = request.getParameter("certificateType");
+		String certificateNumber = request.getParameter("certificateNumber");
+		String examinationCardNumber = request.getParameter("examinationCardNumber");
+		String systemCode = request.getParameter("systemCode");
+		String imagePath = request.getParameter("imagePath");
+		
+		//判断是否重新获取试卷
+		//防止页面刷新，添加学员记录
+		List<ExamStudent> studentRecords = examStudentService.findExamStudentByCoursewareIdAndStudentCode(coursewareId,accountId);//之前是否有过考试记录
+		if (studentRecords != null && studentRecords.size() != 0) {//有考试记录
+			//判断是续接上次考试还是重考
+			for (ExamStudent examStudent : studentRecords) {
+				if(examStudent.getEndTime()==null) {//考试结束时间为空
+					Calendar calendar = Calendar.getInstance();
+					
+					calendar.setTime(examStudent.getStartTime());
+					calendar.add(Calendar.MINUTE, examStudent.getExamTime());//考试结束时间
+					
+					if(calendar.getTime().getTime() > Calendar.getInstance().getTime().getTime()) {//考试进行时间内-重考
+						Course examRule = examRuleXmlService.findExamRule(examStudent.getCoursewareId(), "imsmanifestext");//获取考试约束参数
+						Map<String, Object> map = examPaperService.getExamPaper(examRule, examStudent.getExamPaper().getPaperUrl(), examStudent, ExamProperties.CONTINUE_LAST_EXAM_PAPER);
+						
+						long miniSeconds = calendar.getTime().getTime() - Calendar.getInstance().getTime().getTime();
+						int seconds = (int) Math.floor(miniSeconds/1000);
+						model.addAttribute("remainTime", seconds);
+						model.addAttribute("examStudent", examStudent);
+						model.addAttribute("paper", map);
+						return "paper";
+					}
+				}
+			}
+		}
+			
+		ExamStudent examStudent = new ExamStudent();
+		
+		examStudent.setCreateTime(new Date());
+		examStudent.setStudentCode(accountId);
+		examStudent.setStudentName(accountName);
+		examStudent.setStudentSex(sex);
+		examStudent.setPhoneNumber(phoneNumber);
+		examStudent.setCertificateType(certificateType);
+		examStudent.setCertificateNumber(certificateNumber);
+		examStudent.setCoursewareId(coursewareId);
+		examStudent.setCoursewareName(coursewareName);
+		examStudent.setExaminationCardNumber(examinationCardNumber);
+		examStudent.setSystemCode(systemCode);
+		examStudent.setStartTime(new Date());
+		examStudent.setDelFlag(ExamProperties.NO_DELETE_FLAG);
+		examStudent.setModifyTime(new Date());
+		examStudent.setImagePath(imagePath);
+		
+		List<String> paperFileNames = new ArrayList<String>();
+		if(useFtp) {//FTP获取
+			FTPUtil.connect();
+			String[] fileNames = FTPUtil.getAllFileNames(coursewareId+File.separator+"paper"+File.separator+"exam");
+			if(fileNames!=null && fileNames.length>0) {
+				for(String fileName : fileNames) {
+					if(!fileName.contains("history") && !paperFileNames.contains(fileName)) {
+						logger.info(fileName);
+						paperFileNames.add(fileName);//添加所有有效试卷
+					}
+				}
+			}
+		} else {//本地服务器
+			List<String> fileNames = FileUtil.getFilesName(coursewareId+File.separator+"paper");
+			if(fileNames!=null && fileNames.size()>0) {
+				for(String fileName : fileNames) {
+					if(!fileName.contains("history") && !paperFileNames.contains(fileName)) {
+						logger.info(fileName);
+						paperFileNames.add(fileName);//添加所有有效试卷
+					}
+				}
+			}
+		}
+		
+		//获取一张随机试卷
+		Course examRule = examRuleXmlService.findExamRule(coursewareId, "imsmanifestext");//获取考试约束参数
+		String paperFileName = paperFileNames.get((int) Math.random()*paperFileNames.size());//随机获取一张试卷
+		Map<String, Object> map = examPaperService.getExamPaper(examRule, paperFileName, examStudent, ExamProperties.GET_NEW_EXAM_PAPER);
+		int seconds = examRule.getConstraint().getKsconstraint().getCountdown_time() * 60;
+		model.addAttribute("remainTime", seconds);
+		model.addAttribute("examStudent", examStudent);
+		model.addAttribute("paper", map);
+		
+		return "paper";
+	}
+	
+	/**
+	 * 缓存答案
+	 * @param request
+	 */
+	@RequestMapping(value="/saveAnswer")
+	@ResponseBody
+	public void saveAnswer(HttpServletRequest request) {
+		String paperId = request.getParameter("paperId");
+		String answer = request.getParameter("answer");
+		examPaperAnswerService.saveAnswer(paperId, answer);
+	}
+	
+	/**
+	 * 标记题目
+	 * @param request
+	 */
+	@RequestMapping(value="/mark")
+	@ResponseBody
+	public void mark(HttpServletRequest request) {
+		String paperId = request.getParameter("paperId");
+		String mark = request.getParameter("mark");
+		examPaperAnswerService.saveMark(paperId, mark);
+	}
+	
+	/**
+	 * 阅卷
+	 * @param request
+	 * @param model
+	 * @return
+	 */
+	@RequestMapping(value="/inspect")
+	public String inspect(HttpServletRequest request,Model model) {
+		String paperId = request.getParameter("paperId");
+		Paper paper = examPaperService.getPaperById(paperId);
+		String score = examPaperService.inspectPaper(paperId,paper);
+		logger.info(score);
+		model.addAttribute("score", score);
+		return "result";
+	}
+}

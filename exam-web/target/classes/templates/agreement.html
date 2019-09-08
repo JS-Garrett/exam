@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta charset="UTF-8">
+<title>同意协议</title>
+<link th:href="@{/css/style.css}" rel="stylesheet" type="text/css" />
+<script type="text/javascript"   th:src="@{/js/jquery-3.3.1.min.js}"></script>
+<script type="text/javascript"   th:src="@{/js/agreement.js}"></script>
+</head>
+<body>
+	<form th:action="@{/exam/paper}" method="post">
+		<input type="hidden" th:value="${coursewareId}" name="coursewareId">
+		<input type="hidden" th:value="${coursewareName}" name="coursewareName">
+		<input type="hidden" th:value="${access_token}" name="access_token">
+		<input type="hidden" th:value="${behaviorId}" name="behaviorId">
+		<input type="hidden" th:value="${accountId}" name="accountId">
+		<input type="hidden" th:value="${accountName}" name="accountName">
+		<input type="hidden" th:value="${classId}" name="classId">
+		<input type="hidden" th:value="${sex}" name="sex">
+		<input type="hidden" th:value="${phoneNumber}" name="phoneNumber">
+		<input type="hidden" th:value="${certificateType}" name="certificateType">
+		<input type="hidden" th:value="${certificateNumber}" name="certificateNumber">
+		<input type="hidden" th:value="${examinationCardNumber}" name="examinationCardNumber">
+		<input type="hidden" th:value="${systemCode}" name="systemCode">
+		<input type="hidden" th:value="${imagePath}" name="imagePath">
+		<input type="checkbox" value="我同意此注意事项">
+		<button disabled="disabled">开始考试</button>
+	</form>
+</body>
+</html>

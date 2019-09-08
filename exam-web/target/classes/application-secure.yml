@@ -1,0 +1,11 @@
+security:
+  oauth2:
+    resource:
+      tokenInfoUri: http://localhost:9005/server/oauth/check_token
+      preferTokenInfo: true
+
+    client:
+      accessTokenUri: http://localhost:9005/server/oauth/token
+      userAuthorizationUri: http://localhost:9005/server/oauth/authorize
+      clientId: client_1
+      clientSecret: 123456
